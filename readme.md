@@ -3,7 +3,7 @@ I finally indulged a small desire I've had ever since I was a kid and my neighbo
 
 ![Geiger Counter](pictures/geiger_counter.png)
 
-This design is based around a [LND-712](https://www.lndinc.com/products/geiger-mueller-tubes/712/) end-window alpha-beta-gamma detector that I bought from [Images Scientific Instruments](https://www.imagesco.com/geiger/geiger-counter-tubes.html). It's being driven by a [high voltage generator and pulse detector](https://www.rhelectronics.store/high-voltage-geiger-probe-driver-power-supply-module-420v-550v-with-ttl-digitized-pulse-output) from RH Electronics. Data processing and display is handled by an ESP32-based [TTGO Lilygo T-display](https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board).  Code was written using the Espressif IDF.  A pair of hand-built boards round out the design providing  a RGB back-lit power button and '555'-based audio clicker to get those old timie geiger counter clicks.
+This design is based around a [LND-712](https://www.lndinc.com/products/geiger-mueller-tubes/712/) end-window alpha-beta-gamma detector that I bought from [Images Scientific Instruments](https://www.imagesco.com/geiger/geiger-counter-tubes.html). It's being driven by a [high voltage generator and pulse detector](https://www.rhelectronics.store/high-voltage-geiger-probe-driver-power-supply-module-420v-550v-with-ttl-digitized-pulse-output) from RH Electronics. Data processing and display is handled by an ESP32-based [TTGO Lilygo T-display](https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board).  Code was written using the Espressif IDF.  A pair of hand-built boards round out the design providing  a RGB back-lit power button and '555'-based audio clicker to get those old timie geiger counter clicks (an update replaced the 555 with software because I figured not everyone wanted to build the clicker circuit).
 
 Although I'm not sure how many people will want to duplicate this exact design, I'm making it publicly available in the hopes that some parts of it may be useful to people.  Certainly it is easy to swap out various parts, such as the tube and/or HV driver for other components and still make use of the code here.
 
@@ -20,6 +20,7 @@ Although I'm not sure how many people will want to duplicate this exact design, 
 5. Provides a mode to accumulate over a specified period
 6. Mute control
 7. Rechargeable battery with Low Battery indication (or USB power)
+8. Smooth gauge needle updates (starting with firmware version 1.1)
 
 ### Accuracy note
 Measuring radiation turns out to be one of those the-devil-is-in-the-details problems where a lot of things affect how accurately one is measuring a phenomena.  Like all uncalibrated units this device is not an accurate measure of actual radiation dose and should not be employed for any critical use.  A lot of smarter people than me have contemplated how to turn the pulses into some sort of measurement.  I ended up using the following three sources to decide on a conversion factor of 0.00833 for Counts/Minute to uSv/Hour for the LND-712 tube.  This can be changed in the firmware ```main/config.h``` file.
@@ -88,9 +89,15 @@ The clicker module is based around a 3.3V capable ST TS555CN chip (but any 3.3V 
 
 ![Clicker Wiring Diagram](pictures/clicker_schematic.png)
 
-#### Replace the 555 clicker circuit with software
+#### Software clicker output
 
-I built my clicker module before the display part to quickly get some feedback from the HV board and tube so I just included it in this project.  However you could also use another high-resolution timer and repurpose the mute GPIO output on the ESP32 to directly drive the audio.  Just set the GPIO high and trigger the timer like I already trigger the LED timer from the pulse input GPIO ISR routine.  Then when the timer expires, clear the GPIO output in its callback.  You'll still probably need the NPN (or n-channel MOSFET) transistor diver circuit for the speaker unless you use a low current piezo transducer that could be connected directly to the ESP32 GPIO.
+Starting with firmware version 1.1 the firmware generates a 2.5 mSec click output on GPIO2 (2.5 mSec on/2.5 mSec off).  This may be connected directly to a low current audio output transducer like a piezo buzzer or through a transistor driver as shown below to a higher current speaker.  This obviates the need for the 555-based clicker circuit (although the Mute signal is still generated if you want to use one).
+
+![Block Wiring Diagram with software clicker](pictures/block_schematic_2.png)
+
+My audio output module became the following using the software click output.
+
+![Simple Clicker Circuit](pictures/simple_clicker.png)
 
 ### Obligatory High-Voltage Warning
 The high-voltage board from RH Electronics generates 500V (albeit at a fairly low current) and this can hurt you!  So be careful and don't touch anything on it or the connections to the tube.
@@ -194,6 +201,25 @@ I (627) st7789: Display orientation: LANDSCAPE
 I (627) st7789: 0x36 command value: 0x60
 ```
 
+Starting with firmware version 1.1 the current raw CPS and CPM values are logged every second for use by an external computer attached to the Geiger Counter via USB.
+
+```
+I (10388) cnt_task: CPS = 0, CPM = 12
+I (11388) cnt_task: CPS = 0, CPM = 11
+I (12388) cnt_task: CPS = 0, CPM = 10
+I (13388) cnt_task: CPS = 2, CPM = 18
+I (14388) cnt_task: CPS = 0, CPM = 17
+I (15388) cnt_task: CPS = 2, CPM = 24
+I (16388) cnt_task: CPS = 3, CPM = 84
+I (17388) cnt_task: CPS = 3, CPM = 100
+I (18388) cnt_task: CPS = 2, CPM = 103
+I (19388) cnt_task: CPS = 2, CPM = 144
+I (20388) cnt_task: CPS = 7, CPM = 190
+I (21388) cnt_task: CPS = 8, CPM = 231
+I (22388) cnt_task: CPS = 11, CPM = 360
+
+```
+
 ### Programming pre-compiled firmware
 Pre-compiled firmware binary files are included.  They may be loaded at the following locations using the IDF command line tool or the Espressif Windows programming tool available [here](https://www.espressif.com/en/support/download/other-tools).
 
@@ -220,6 +246,7 @@ The Espressif programming tool is setup as shown below.  Select the COM port ass
 | GPIO Pin | Description / Connection |
 | --- | --- |
 | GPIO 0 | Left Button on T-display (active low) |
+| GPIO 2 | Click output (active high) [starting with firmware v1.1] |
 | GPIO 4 | Display backlight (PWM Output) (currently unused, default 100% brigthness) |
 | GPIO 5 | LCD CSN |
 | GPIO 12 | Red LED Output (active high) |
@@ -235,6 +262,16 @@ The Espressif programming tool is setup as shown below.  Select the COM port ass
 | GPIO 35 | Right Button on T-display (active low) |
 | GPIO 36 | Geiger HV Board pulse input (active high) |
 
+### Release notes
+
+**Firmware v1.1**
+
+1. Log CPS and CPM to serial out
+2. Implement software clicker output
+3. Animate gauge needle between value updates
+4. Fix bug in displayed CPM from incorrectly applied tube dead time compensation
+5. Rewrite dynamic averaging algorithm to better determine when to reduce averages used to compute CPM for high rates of change involving high count rates
+6. Fixed a bug where the gauge ranging logic would not move to a higher range and a count greater than the maximum was shown
 
 ## Enclosure
 The enclosure was designed using OpenSCAD. It's pretty much a quick&dirty design without too much parameterization.  There is one design file but you set a variable at the top to render the piece you want to export.  I've included both the source and exported STL files.  Thanks to [cyborg_x1](https://www.thingiverse.com/thing:5246878) for the radioactive trefoil.
