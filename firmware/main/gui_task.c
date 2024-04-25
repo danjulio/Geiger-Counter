@@ -130,6 +130,8 @@ static lv_obj_t* lbl_cum_dose;
 static lv_obj_t* lbl_l_btn;
 static lv_obj_t* lbl_r_btn;
 
+static lv_anim_t anim_gauge;
+
 // Accumulated values
 static int cum_count;
 static float cum_dose;
@@ -154,7 +156,6 @@ static button_state_t button_state[BUTTON_COUNT];
 
 // Gauge ranges
 #define NUM_GAUGE_RANGES 5
-static int cur_gauge_range;
 static const uint32_t gauge_cpm_threshold[NUM_GAUGE_RANGES-1] = {100,  1000, 10000,  60000};
 static const int16_t  gauge_max_value[NUM_GAUGE_RANGES]       = {100,  1000, 10000,  1000,  10000};
 static const bool     gauge_is_cpm[NUM_GAUGE_RANGES]          = {true, true, true,   false, false};
@@ -198,6 +199,7 @@ static void gui_update_button_info();
 static void gui_update_count_info();
 static void gui_update_mute_info();
 static void gui_update_power_info();
+static void gui_update_gauge_needle(lv_obj_t* obj, int32_t val);
 static void IRAM_ATTR lv_tick_callback();
 static void eval_button(button_state_t* bs, bool* short_press, bool* long_press);
 static uint32_t get_uptime_msec();
@@ -331,9 +333,6 @@ static void gui_state_init()
 	cum_dose = 0;
 	cum_start_timestamp = 0;
 	accum_interval_index = 0;
-	
-	// Force update to gauge to draw correct range values
-	cur_gauge_range = -1;
 }
 
 
@@ -385,6 +384,11 @@ static void gui_screen_init()
 	lv_obj_set_size(gauge, 130, 130);
 	lv_obj_set_pos(gauge, 2, 15);
 	lv_gauge_set_needle_count(gauge, 1, needle_colors);
+	
+	// Gauge needle animator
+	lv_anim_init(&anim_gauge);
+	lv_anim_set_time(&anim_gauge, 500, 0);
+	lv_anim_set_exec_cb(&anim_gauge, gauge, (void *) gui_update_gauge_needle);
 	
 	// Real-time count
 	lbl_rt_count = lv_label_create(screen, NULL);
@@ -517,6 +521,13 @@ static void gui_task_btn_handler_task(lv_task_t * task)
 		audio_muted = !audio_muted;
 		gpio_set_level(CONFIG_MUTEL_PIN, audio_muted ? 0 : 1);
 		gui_update_mute_info();
+		
+		// Let cnt_task know about mute change
+		if (audio_muted) {
+			xTaskNotify(task_handle_cnt, CNT_NOTIFY_MUTE_ON_MASK, eSetBits);
+		} else {
+			xTaskNotify(task_handle_cnt, CNT_NOTIFY_MUTE_OFF_MASK, eSetBits);
+		}
 	}
 	
 	if (btn_r_short) {
@@ -572,7 +583,11 @@ static void gui_update_button_info()
 
 static void gui_update_count_info()
 {
-	// Statically allocated buffers for each lv object
+	// Statically allocated variables
+	static int cur_gauge_range = -1;  // Force first update to draw
+	static uint32_t prev_gauge_val = 0;
+	
+	// Statically allocated buffers for each lv text object
 	static char rt_count_buf[11];     // "XXXXX CPX" + null + 1 extra
 	static char rt_dose_buf[15];      // "XXX.XX uSv/Hr" + null + 1
 	static char cum_time_buf[15];     // "XXXXX:XX:XX" + null + 1 (where m/s are 8-bit)
@@ -587,33 +602,45 @@ static void gui_update_count_info()
 	uint8_t m, s;
 	uint32_t adj_cpm;
 	uint32_t adj_cps;
+	uint32_t range_val;
 	float f;
 	
 	// Get the count values and adjust for the tube's dead time
 	get_counts(&cnts);
-	f = ((float) cnts.cpm) / (1.0 - (((float) cnts.cpm) * CONFIG_DEAD_TIME_SEC));
+	f = ((float) cnts.cpm) / (1.0 - (((float) cnts.cpm) * CONFIG_DEAD_TIME_SEC / 60));
 	adj_cpm = round(f);
 	f = ((float) cnts.cps) / (1.0 - (((float) cnts.cps) * CONFIG_DEAD_TIME_SEC));
 	adj_cps = round(f);
 	
-	// Look to see if we have to change the gauge range
+	// Check if we have to update the gauge range
+	range_val = (adj_cps >= 1000) ? adj_cps * 60 : adj_cpm;
 	for (range=0; range<(NUM_GAUGE_RANGES-1); range++) {
-		if (adj_cpm < gauge_cpm_threshold[range]) {
+		if (range_val < gauge_cpm_threshold[range]) {
 			break;
 		}
 	}
-	if (range != cur_gauge_range) {
+	
+	// Update the gauge
+	range_val = gauge_is_cpm[range] ? adj_cpm : adj_cps;
+	if (range == cur_gauge_range) {
+		// Existing gauge range so animate the needle movement to the next position
+		lv_anim_set_values(&anim_gauge, prev_gauge_val, range_val);
+		lv_anim_create(&anim_gauge);
+	} else {
+		// Update gauge range
 		cur_gauge_range = range;
 		lv_gauge_set_range(gauge, 0, gauge_max_value[range]);
 		lv_gauge_set_critical_value(gauge, gauge_max_value[range]);
+		
+		// Set initial needle position
+		lv_gauge_set_value(gauge, 0, range_val);
 	}
+	prev_gauge_val = range_val;
 	
-	// Update the gauge and real-time counts
+	// Update the real-time count
 	if (gauge_is_cpm[range]) {
-		lv_gauge_set_value(gauge, 0, adj_cpm);
 		sprintf(rt_count_buf, "%d CPM", (int) adj_cpm);
 	} else {
-		lv_gauge_set_value(gauge, 0, adj_cps);
 		sprintf(rt_count_buf, "%d CPS", (int) adj_cps);
 	}
 	lv_label_set_static_text(lbl_rt_count, rt_count_buf);
@@ -684,7 +711,6 @@ static void gui_update_power_info()
 	
 	// Get the current battery level
 	v = get_batt_v();
-//	ESP_LOGI(TAG, "V = %1.2f", v);
 	
 	// Update power state
 	power_state = batt_v_to_power_state(v);
@@ -715,6 +741,12 @@ static void gui_update_power_info()
 			}
 		}
 	}
+}
+
+
+static void gui_update_gauge_needle(lv_obj_t* obj, int32_t val)
+{
+	lv_gauge_set_value(gauge, 0, (int16_t) val);
 }
 
 

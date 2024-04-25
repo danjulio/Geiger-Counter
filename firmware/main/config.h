@@ -47,6 +47,7 @@
 #define CONFIG_G_LED_PIN       13
 #define CONFIG_B_LED_PIN       15
 
+#define CONFIG_CLICK_PIN       2
 #define CONFIG_MUTEL_PIN       17
 
 #define CONFIG_PWR_SNS_EN_PIN  14
@@ -107,6 +108,9 @@
 // System Configuration
 //
 
+// Click output high period
+#define CONFIG_PULSE_CLICK_MSEC      2.5
+
 // Pulse blink period
 #define CONFIG_PULSE_BLINK_MSEC      20
 
@@ -123,9 +127,14 @@
 #define CONFIG_DEAD_TIME_SEC         0.00009
 
 // Number of previous samples to analyze to detect high rates of change
-// in order to reduce the sample size used to compute CPS.  This has the
+// in order to reduce the sample size used to compute CPM.  This has the
 // effect of making the display more responsive.
 #define CONFIG_DELTA_DET_SAMPLES     5
+
+// Percentages for detect sample average to differ from long-term average
+// to trigger reduction in sample size used to compute CPM.
+#define CONFIG_LOW_DET_PERCENT       80
+#define CONFIG_HIGH_DET_PERCENT      125
 
 
 
