@@ -3,13 +3,13 @@ I finally indulged a small desire I've had ever since I was a kid and my neighbo
 
 ![Geiger Counter](pictures/geiger_counter.png)
 
-This design is based around a [LND-712](https://www.lndinc.com/products/geiger-mueller-tubes/712/) end-window alpha-beta-gamma detector that I bought from [Images Scientific Instruments](https://www.imagesco.com/geiger/geiger-counter-tubes.html). It's being driven by a [high voltage generator and pulse detector](https://www.rhelectronics.store/high-voltage-geiger-probe-driver-power-supply-module-420v-550v-with-ttl-digitized-pulse-output) from RH Electronics. Data processing and display is handled by an ESP32-based [TTGO Lilygo T-display](https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board).  Code was written using the Espressif IDF.  A pair of hand-built boards round out the design providing  a RGB back-lit power button and '555'-based audio clicker to get those old timie geiger counter clicks (an update replaced the 555 with software because I figured not everyone wanted to build the clicker circuit).
+This design is based around a [LND-712](https://www.lndinc.com/products/geiger-mueller-tubes/712/) end-window alpha-beta-gamma detector that I bought from [Images Scientific Instruments](https://www.imagesco.com/geiger/geiger-counter-tubes.html). It's being driven by a [high voltage generator and pulse detector](https://www.rhelectronics.store/high-voltage-geiger-probe-driver-power-supply-module-420v-550v-with-ttl-digitized-pulse-output) from RH Electronics. Data processing and display is handled by an ESP32-based [TTGO Lilygo T-display](https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board).  Code was written using the Espressif IDF.  A pair of hand-built boards round out the design providing  a RGB back-lit power button and '555'-based audio clicker to get those old timie geiger counter clicks (an update replaced the 555 with software because I figured not everyone may want to build the clicker circuit).
 
 Although I'm not sure how many people will want to duplicate this exact design, I'm making it publicly available in the hopes that some parts of it may be useful to people.  Certainly it is easy to swap out various parts, such as the tube and/or HV driver for other components and still make use of the code here.
 
 ![Hot Plate](pictures/hot_plate.png)
 
-(this plate serves hot food in more ways than one)
+(This plate serves hot food in more ways than one)
 
 ## Features
 
@@ -77,7 +77,7 @@ Accumulation timer counts down from current accumulation period.  Accumulation s
 Note that accumulation periods longer than one hour should probably use an external USB power source unless you use a larger Li-Ion battery than I did.
 
 ## Hardware
-This project used quite a number of components I already had so you might end up substituting here and there.  The power switch came from some old PC and has a translucent actuator so I decided to backlight it using a pair of small RGB LEDs.  I measured the LED Vf for each channel, arbitrarily picked a current of about 3mA per LED, and calculated series resistors (from 3.3V) to achieve that (then I adjusted the PWM values in the code to make nice but dimmer Red and Green colors).  Power is supplied by a PK Cell ICR10440 3.7V 350 mAh Li-Ion cell.  All of this can be changed based on the parts you use.
+This project used quite a number of components I already had so you might end up substituting here and there.  The power switch came from some old PC and has a translucent actuator so I decided to backlight it using a pair of small RGB LEDs.  I measured the LED Vf for each channel, arbitrarily picked a current of about 3mA per LED, and calculated series resistors (from 3.3V) to achieve that (then I adjusted the PWM values in the code to make nice but dimmer Red and Green colors).  Power is supplied by a PK Cell ICR10440 3.7V 350 mAh Li-Ion cell.  All of this can be changed based on the parts you have.
 
 ![Electronics](pictures/electronics.png)
 
